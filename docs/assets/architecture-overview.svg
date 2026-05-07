@@ -1,0 +1,67 @@
+<svg width="1600" height="980" viewBox="0 0 1600 980" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="980" fill="#F5F8FC"/>
+  <rect x="60" y="54" width="1480" height="872" rx="28" fill="url(#bg)" stroke="#D7E3F4"/>
+  <text x="108" y="132" fill="#16325C" font-family="Arial, sans-serif" font-size="40" font-weight="700">OrgPilot AI Pro Architecture</text>
+  <text x="108" y="174" fill="#5D7084" font-family="Arial, sans-serif" font-size="22">AI-assisted Salesforce metadata, automation, and delivery pipeline for SmartCredit 360</text>
+
+  <rect x="108" y="232" width="286" height="164" rx="24" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="136" y="278" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="24" font-weight="700">1. Experience Layer</text>
+  <text x="136" y="322" fill="#243746" font-family="Arial, sans-serif" font-size="20">Next.js UI</text>
+  <text x="136" y="354" fill="#243746" font-family="Arial, sans-serif" font-size="20">Template Loader</text>
+  <text x="136" y="386" fill="#243746" font-family="Arial, sans-serif" font-size="20">Dry Run / Deploy Console</text>
+
+  <rect x="438" y="232" width="286" height="164" rx="24" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="466" y="278" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="24" font-weight="700">2. AI Schema Layer</text>
+  <text x="466" y="322" fill="#243746" font-family="Arial, sans-serif" font-size="20">OpenAI / Einstein / ALBERT</text>
+  <text x="466" y="354" fill="#243746" font-family="Arial, sans-serif" font-size="20">Scala LLM Adapter</text>
+  <text x="466" y="386" fill="#243746" font-family="Arial, sans-serif" font-size="20">Fallback Generator</text>
+
+  <rect x="768" y="232" width="286" height="164" rx="24" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="796" y="278" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="24" font-weight="700">3. Guardrail Layer</text>
+  <text x="796" y="322" fill="#243746" font-family="Arial, sans-serif" font-size="20">Validation / Normalize</text>
+  <text x="796" y="354" fill="#243746" font-family="Arial, sans-serif" font-size="20">Deploy Order Checks</text>
+  <text x="796" y="386" fill="#243746" font-family="Arial, sans-serif" font-size="20">Compliance Notes</text>
+
+  <rect x="1098" y="232" width="394" height="164" rx="24" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="1126" y="278" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="24" font-weight="700">4. Metadata Orchestration</text>
+  <text x="1126" y="322" fill="#243746" font-family="Arial, sans-serif" font-size="20">Idempotent create / update / skip</text>
+  <text x="1126" y="354" fill="#243746" font-family="Arial, sans-serif" font-size="20">Master-detail &amp; formula dependency handling</text>
+  <text x="1126" y="386" fill="#243746" font-family="Arial, sans-serif" font-size="20">Salesforce Metadata API payload builder</text>
+
+  <rect x="108" y="486" width="454" height="206" rx="24" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="136" y="532" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="24" font-weight="700">5. Salesforce DX Source Pack</text>
+  <text x="136" y="578" fill="#243746" font-family="Arial, sans-serif" font-size="20">Apex Classes</text>
+  <text x="136" y="610" fill="#243746" font-family="Arial, sans-serif" font-size="20">Triggers</text>
+  <text x="136" y="642" fill="#243746" font-family="Arial, sans-serif" font-size="20">Validation Rules</text>
+  <text x="136" y="674" fill="#243746" font-family="Arial, sans-serif" font-size="20">Flows</text>
+
+  <rect x="610" y="486" width="454" height="206" rx="24" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="638" y="532" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="24" font-weight="700">6. SmartCredit 360 UI</text>
+  <text x="638" y="578" fill="#243746" font-family="Arial, sans-serif" font-size="20">LWC Workbench</text>
+  <text x="638" y="610" fill="#243746" font-family="Arial, sans-serif" font-size="20">Composite Scoring</text>
+  <text x="638" y="642" fill="#243746" font-family="Arial, sans-serif" font-size="20">Findex / FICO Summary</text>
+  <text x="638" y="674" fill="#243746" font-family="Arial, sans-serif" font-size="20">Error Log Panel</text>
+
+  <rect x="1112" y="486" width="380" height="206" rx="24" fill="#16325C"/>
+  <text x="1140" y="532" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="24" font-weight="700">7. Business Outcomes</text>
+  <text x="1140" y="578" fill="#E8F1FB" font-family="Arial, sans-serif" font-size="20">Faster sandbox setup</text>
+  <text x="1140" y="610" fill="#E8F1FB" font-family="Arial, sans-serif" font-size="20">Repeatable lending template</text>
+  <text x="1140" y="642" fill="#E8F1FB" font-family="Arial, sans-serif" font-size="20">Compliance-aware delivery</text>
+  <text x="1140" y="674" fill="#E8F1FB" font-family="Arial, sans-serif" font-size="20">Showcase-ready Salesforce accelerator</text>
+
+  <path d="M394 314H438" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M724 314H768" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M1054 314H1098" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M1270 396V450" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M1270 450H335" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M335 450V486" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M837 450V486" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M1302 450V486" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+
+  <defs>
+    <linearGradient id="bg" x1="800" y1="54" x2="800" y2="926" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBFDFF"/>
+      <stop offset="1" stop-color="#EEF4FB"/>
+    </linearGradient>
+  </defs>
+</svg>

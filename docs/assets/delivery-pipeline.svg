@@ -1,0 +1,53 @@
+<svg width="1600" height="860" viewBox="0 0 1600 860" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="860" fill="#F7FAFD"/>
+  <text x="92" y="104" fill="#16325C" font-family="Arial, sans-serif" font-size="40" font-weight="700">Delivery Pipeline</text>
+  <text x="92" y="146" fill="#5D7084" font-family="Arial, sans-serif" font-size="22">How business intent becomes a deployable Salesforce lending solution</text>
+
+  <rect x="92" y="232" width="210" height="132" rx="20" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="122" y="286" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="22" font-weight="700">Business Need</text>
+  <text x="122" y="322" fill="#243746" font-family="Arial, sans-serif" font-size="18">Lending / Compliance</text>
+
+  <rect x="360" y="232" width="210" height="132" rx="20" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="390" y="286" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="22" font-weight="700">Schema</text>
+  <text x="390" y="322" fill="#243746" font-family="Arial, sans-serif" font-size="18">AI + Fallback JSON</text>
+
+  <rect x="628" y="232" width="210" height="132" rx="20" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="658" y="286" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="22" font-weight="700">Validation</text>
+  <text x="658" y="322" fill="#243746" font-family="Arial, sans-serif" font-size="18">Normalize + Guardrails</text>
+
+  <rect x="896" y="232" width="210" height="132" rx="20" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="926" y="286" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="22" font-weight="700">Metadata</text>
+  <text x="926" y="322" fill="#243746" font-family="Arial, sans-serif" font-size="18">Payload / XML Build</text>
+
+  <rect x="1164" y="232" width="210" height="132" rx="20" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="1194" y="286" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="22" font-weight="700">Deploy</text>
+  <text x="1194" y="322" fill="#243746" font-family="Arial, sans-serif" font-size="18">Create / Update / Skip</text>
+
+  <rect x="92" y="506" width="408" height="180" rx="22" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="122" y="556" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="24" font-weight="700">Source Artifacts</text>
+  <text x="122" y="600" fill="#243746" font-family="Arial, sans-serif" font-size="19">Validation Rules</text>
+  <text x="122" y="632" fill="#243746" font-family="Arial, sans-serif" font-size="19">Apex Classes &amp; Triggers</text>
+  <text x="122" y="664" fill="#243746" font-family="Arial, sans-serif" font-size="19">Flows, LWC, Seed Scripts</text>
+
+  <rect x="548" y="506" width="408" height="180" rx="22" fill="#FFFFFF" stroke="#D8E2F0"/>
+  <text x="578" y="556" fill="#0B5CAB" font-family="Arial, sans-serif" font-size="24" font-weight="700">Runtime UX</text>
+  <text x="578" y="600" fill="#243746" font-family="Arial, sans-serif" font-size="19">Underwriting cockpit</text>
+  <text x="578" y="632" fill="#243746" font-family="Arial, sans-serif" font-size="19">Score and compliance visibility</text>
+  <text x="578" y="664" fill="#243746" font-family="Arial, sans-serif" font-size="19">Findex / FICO style reporting</text>
+
+  <rect x="1004" y="506" width="370" height="180" rx="22" fill="#16325C"/>
+  <text x="1034" y="556" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="24" font-weight="700">Platform Value</text>
+  <text x="1034" y="600" fill="#E8F1FB" font-family="Arial, sans-serif" font-size="19">Repeatable org bootstrap</text>
+  <text x="1034" y="632" fill="#E8F1FB" font-family="Arial, sans-serif" font-size="19">Safer metadata delivery</text>
+  <text x="1034" y="664" fill="#E8F1FB" font-family="Arial, sans-serif" font-size="19">Portfolio-grade demo project</text>
+
+  <path d="M302 298H360" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M570 298H628" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M838 298H896" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M1106 298H1164" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M1269 364V432" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M1269 432H296" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M296 432V506" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M752 432V506" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+  <path d="M1189 432V506" stroke="#0B5CAB" stroke-width="6" stroke-linecap="round"/>
+</svg>

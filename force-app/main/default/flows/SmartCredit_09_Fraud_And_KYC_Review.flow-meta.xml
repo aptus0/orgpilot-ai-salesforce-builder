@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>60.0</apiVersion>
+    <label>SmartCredit 09 Fraud And KYC Review</label>
+    <processType>Flow</processType>
+    <status>Draft</status>
+</Flow>

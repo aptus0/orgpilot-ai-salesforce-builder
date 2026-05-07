@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Amt_Financed_GT_Fin_Charge</fullName>
+    <active>true</active>
+    <description>Protects against invalid TILA disclosure values.</description>
+    <errorConditionFormula>
+        AND(
+            NOT(ISBLANK(Amount_Financed__c)),
+            NOT(ISBLANK(Finance_Charge__c)),
+            Amount_Financed__c &lt; Finance_Charge__c
+        )
+    </errorConditionFormula>
+    <errorDisplayField>Amount_Financed__c</errorDisplayField>
+    <errorMessage>Amount Financed cannot be less than Finance Charge.</errorMessage>
+</ValidationRule>

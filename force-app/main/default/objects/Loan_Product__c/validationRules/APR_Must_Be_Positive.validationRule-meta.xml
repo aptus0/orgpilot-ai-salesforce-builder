@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>APR_Must_Be_Positive</fullName>
+    <active>true</active>
+    <description>APR must be greater than zero for US lending disclosures.</description>
+    <errorConditionFormula>APR__c &lt;= 0</errorConditionFormula>
+    <errorDisplayField>APR__c</errorDisplayField>
+    <errorMessage>APR must be greater than zero for Reg Z / TILA disclosures.</errorMessage>
+</ValidationRule>
