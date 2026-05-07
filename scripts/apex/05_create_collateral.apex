@@ -2,6 +2,5 @@ Loan_Application__c applicationRecord = [SELECT Id FROM Loan_Application__c ORDE
 insert new Collateral__c(
     Loan_Application__c = applicationRecord.Id,
     Collateral_Type__c = 'Vehicle',
-    Estimated_Value__c = 45000,
-    VIN__c = '1HGCM82633A123456'
+    Estimated_Value__c = 45000
 );

@@ -5,7 +5,5 @@ insert new Loan_Application__c(
     Loan_Product__c = product.Id,
     Requested_Amount__c = 320000,
     Term_Months__c = 240,
-    Monthly_Debt__c = 1800,
-    Status__c = 'Under Review',
-    Application_Channel__c = 'Online'
+    Status__c = 'Draft'
 );
