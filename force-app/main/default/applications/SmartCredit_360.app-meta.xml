@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <brand>
+        <headerColor>#1B3A57</headerColor>
+        <shouldOverrideOrgTheme>false</shouldOverrideOrgTheme>
+    </brand>
+    <description>SmartCredit 360 lending operations workspace for underwriting, servicing, and collections.</description>
+    <formFactors>Large</formFactors>
+    <formFactors>Small</formFactors>
+    <isNavAutoTempTabsDisabled>false</isNavAutoTempTabsDisabled>
+    <label>SmartCredit 360</label>
+    <navType>Standard</navType>
+    <tabs>standard-Account</tabs>
+    <tabs>Loan_Product__c</tabs>
+    <tabs>Loan_Application__c</tabs>
+    <tabs>Credit_Analysis__c</tabs>
+    <tabs>Collateral__c</tabs>
+    <tabs>Loan_Agreement__c</tabs>
+    <tabs>Payment_Schedule__c</tabs>
+    <tabs>Collections__c</tabs>
+</CustomApplication>
