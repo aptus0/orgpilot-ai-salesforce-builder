@@ -95,7 +95,17 @@ const RawObjectSchema = z.object({
   enableReports: z.boolean().optional(),
   enableActivities: z.boolean().optional(),
   enableSearch: z.boolean().optional(),
-  fields: z.array(RawFieldSchema).optional()
+  fields: z.array(RawFieldSchema).optional(),
+  validationRules: z
+    .array(
+      z.object({
+        ruleName: z.string(),
+        errorConditionFormula: z.string(),
+        errorMessage: z.string()
+      })
+    )
+    .optional(),
+  triggers: z.array(z.string()).optional()
 });
 
 const RawModelSchema = z.object({
@@ -118,6 +128,17 @@ const RawModelSchema = z.object({
         severity: z.enum(["info", "warning", "critical"])
       })
     )
+    .optional(),
+  businessRulesAndAutomations: z
+    .array(
+      z.object({
+        code: z.string(),
+        title: z.string(),
+        description: z.string(),
+        objectApiName: z.string().optional(),
+        type: z.string()
+      })
+    )
     .optional()
 });
 
@@ -134,6 +155,11 @@ export type ModelValidationResult = {
 function normalizeFieldType(type: unknown, warnings: string[]): SalesforceFieldType {
   if (typeof type === "string" && supportedFieldTypeSet.has(type)) {
     return type as SalesforceFieldType;
+  }
+
+  if (type === "TextArea") {
+    warnings.push('Field tipi "TextArea" Salesforce uyumu icin "LongTextArea" olarak degistirildi.');
+    return "LongTextArea";
   }
 
   if (typeof type === "string") {
@@ -247,6 +273,9 @@ function normalizeField(
     case "LongTextArea":
       field.length = clamp(rawField.length, 256, 131072, 32768);
       field.visibleLines = clamp(rawField.visibleLines, 2, 50, 5);
+      if (rawField.required) {
+        warnings.push(`${apiName}: LongTextArea alanlarda required desteklenmedigi icin kaldirildi.`);
+      }
       field.required = false;
       break;
 
@@ -330,6 +359,7 @@ export function validateAndNormalizeObjectSchema(input: unknown): SchemaValidati
 
   const usedApiNames = new Set<string>();
   const fields = rawFields.map((field) => normalizeField(field, usedApiNames, warnings));
+  const hasMasterDetail = fields.some((field) => field.type === "MasterDetail");
 
   if (fields.length === 0) {
     fields.push(
@@ -347,6 +377,14 @@ export function validateAndNormalizeObjectSchema(input: unknown): SchemaValidati
     warnings.push("Field listesi boş geldiği için varsayılan Status field eklendi.");
   }
 
+  let sharingModel = parsed.sharingModel ?? (parsed.isStandardObject ? "ReadWrite" : "ReadWrite");
+  if (!parsed.isStandardObject && hasMasterDetail && sharingModel !== "ControlledByParent") {
+    warnings.push(
+      "MasterDetail field iceren custom objectlerde sharingModel zorunlu olarak ControlledByParent yapildi."
+    );
+    sharingModel = "ControlledByParent";
+  }
+
   return {
     warnings,
     schema: {
@@ -360,12 +398,14 @@ export function validateAndNormalizeObjectSchema(input: unknown): SchemaValidati
         type: parsed.nameField?.type ?? "Text",
         displayFormat: parsed.nameField?.displayFormat
       },
-      sharingModel: parsed.sharingModel ?? (parsed.isStandardObject ? "ReadWrite" : "ReadWrite"),
+      sharingModel,
       deploymentStatus: parsed.deploymentStatus ?? "Deployed",
       enableReports: parsed.enableReports ?? true,
       enableActivities: parsed.enableActivities ?? true,
       enableSearch: parsed.enableSearch ?? true,
-      fields
+      fields,
+      validationRules: parsed.validationRules ?? [],
+      triggers: parsed.triggers ?? []
     }
   };
 }
@@ -411,7 +451,8 @@ export function validateAndNormalizeModelSchema(input: unknown): ModelValidation
       aiProvider: provider,
       deployOrder,
       objects,
-      complianceRules: parsed.complianceRules ?? []
+      complianceRules: parsed.complianceRules ?? [],
+      businessRulesAndAutomations: parsed.businessRulesAndAutomations ?? []
     }
   };
 }

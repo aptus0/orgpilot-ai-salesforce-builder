@@ -4,7 +4,9 @@
   "private": true,
   "description": "AI destekli profesyonel Salesforce metadata builder: custom object, field, industry template, SmartCredit 360 ve multi-AI adapter.",
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('.next',{ recursive: true, force: true })\"",
     "dev": "next dev",
+    "dev:reset": "npm run clean && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

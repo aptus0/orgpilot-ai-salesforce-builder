@@ -2,8 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OrgPilot AI",
-  description: "AI destekli Salesforce Custom Object ve Field oluşturucu"
+  title: "Temas RE Custom Object Auto",
+  description: "Salesforce custom object ve metadata yonetimi icin sade admin panel",
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/icon.png"
+  }
 };
 
 export default function RootLayout({

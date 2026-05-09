@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateObjectSchema } from "@/lib/ai/generateObjectSchema";
 import type { AiProvider } from "@/lib/types/schema";
+import { createActivityLogEntry } from "@/lib/utils/activity";
 
 const providers = new Set(["fallback", "openai", "salesforce-einstein", "albert", "scala-llm"]);
 
@@ -29,11 +30,33 @@ export async function POST(request: Request) {
       provider
     );
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      trace: [
+        createActivityLogEntry({
+          source: "server",
+          level: "success",
+          action: "generate-schema",
+          message: `Schema uretildi: ${body.objectName}.`,
+          endpoint: "/api/ai/generate-schema",
+          requestMode: "schema"
+        })
+      ]
+    });
   } catch (error) {
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Schema üretim hatası."
+        error: error instanceof Error ? error.message : "Schema uretim hatasi.",
+        trace: [
+          createActivityLogEntry({
+            source: "server",
+            level: "error",
+            action: "generate-schema",
+            message: error instanceof Error ? error.message : "Schema uretim hatasi.",
+            endpoint: "/api/ai/generate-schema",
+            requestMode: "schema"
+          })
+        ]
       },
       { status: 500 }
     );

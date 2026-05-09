@@ -27,6 +27,38 @@ export type AiProvider =
   | "albert"
   | "scala-llm";
 
+export type ConnectionMode = "env" | "username-password" | "access-token" | "sf-cli";
+
+export type SalesforceRuntimeConfig = {
+  loginUrl?: string;
+  username?: string;
+  password?: string;
+  securityToken?: string;
+  instanceUrl?: string;
+  accessToken?: string;
+  targetOrg?: string;
+  apiVersion?: string;
+};
+
+export type ActivityLogEntry = {
+  id: string;
+  timestamp: string;
+  source: "client" | "server";
+  level: "info" | "success" | "error";
+  action:
+    | "generate-schema"
+    | "load-template"
+    | "deploy-model"
+    | "deploy-object"
+    | "deploy-status"
+    | "settings";
+  message: string;
+  endpoint?: string;
+  requestMode?: "schema" | "template" | "dry-run" | "deploy" | "status" | "settings";
+  connectionMode?: ConnectionMode;
+  detail?: string;
+};
+
 export type NameFieldConfig = {
   label: string;
   type: "Text" | "AutoNumber";
@@ -109,6 +141,12 @@ export type SalesforceObjectSchema = {
   enableActivities?: boolean;
   enableSearch?: boolean;
   fields: SalesforceFieldSchema[];
+  validationRules?: Array<{
+    ruleName: string;
+    errorConditionFormula: string;
+    errorMessage: string;
+  }>;
+  triggers?: string[];
 };
 
 export type ComplianceRule = {
@@ -130,6 +168,13 @@ export type SalesforceModelSchema = {
   deployOrder: string[];
   objects: SalesforceObjectSchema[];
   complianceRules?: ComplianceRule[];
+  businessRulesAndAutomations?: Array<{
+    code: string;
+    title: string;
+    description: string;
+    objectApiName?: string;
+    type: string;
+  }>;
 };
 
 export type SchemaGenerationResult = {

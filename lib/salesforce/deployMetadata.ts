@@ -1,6 +1,12 @@
 import { getSalesforceConnection } from "@/lib/salesforce/connection";
 import { buildMetadataPayloads } from "@/lib/salesforce/metadataPayloadBuilder";
-import type { SalesforceModelSchema, SalesforceObjectSchema } from "@/lib/types/schema";
+import type {
+  ActivityLogEntry,
+  SalesforceModelSchema,
+  SalesforceObjectSchema,
+  SalesforceRuntimeConfig
+} from "@/lib/types/schema";
+import { createActivityLogEntry } from "@/lib/utils/activity";
 import {
   validateAndNormalizeModelSchema,
   validateAndNormalizeObjectSchema
@@ -162,6 +168,7 @@ function fieldDeployPhase(fieldMetadata: Record<string, unknown>) {
 export async function deployObjectSchema(params: {
   schema: SalesforceObjectSchema;
   dryRun?: boolean;
+  salesforceConfig?: SalesforceRuntimeConfig;
 }) {
   const normalized = validateAndNormalizeObjectSchema(params.schema);
   const model: SalesforceModelSchema = {
@@ -173,7 +180,8 @@ export async function deployObjectSchema(params: {
 
   const result = await deployModelSchema({
     model,
-    dryRun: params.dryRun
+    dryRun: params.dryRun,
+    salesforceConfig: params.salesforceConfig
   });
 
   return {
@@ -185,7 +193,9 @@ export async function deployObjectSchema(params: {
 export async function deployModelSchema(params: {
   model: SalesforceModelSchema;
   dryRun?: boolean;
+  salesforceConfig?: SalesforceRuntimeConfig;
 }) {
+  const trace: ActivityLogEntry[] = [];
   const normalized = validateAndNormalizeModelSchema(params.model);
   const orderedObjects = sortObjectsByDeployOrder(normalized.model);
   const payloads = orderedObjects.map((object) => ({
@@ -212,10 +222,22 @@ export async function deployModelSchema(params: {
   }));
 
   if (params.dryRun) {
+    trace.push(
+      createActivityLogEntry({
+        source: "server",
+        level: "info",
+        action: "deploy-model",
+        message: `Dry run plan hazirlandi: ${orderedObjects.length} object.`,
+        endpoint: "/api/salesforce/deploy-model",
+        requestMode: "dry-run"
+      })
+    );
+
     return {
       dryRun: true,
       warnings: normalized.warnings,
       normalizedModel: normalized.model,
+      trace,
       deployPlan: orderedObjects.map((object) => ({
         objectApiName: object.objectApiName,
         objectLabel: object.objectLabel,
@@ -231,7 +253,18 @@ export async function deployModelSchema(params: {
     };
   }
 
-  const conn = await getSalesforceConnection();
+  const { conn, connectionMode } = await getSalesforceConnection(params.salesforceConfig);
+  trace.push(
+    createActivityLogEntry({
+      source: "server",
+      level: "info",
+      action: "deploy-model",
+      message: `Salesforce baglantisi kuruldu: ${connectionMode}.`,
+      endpoint: "/api/salesforce/deploy-model",
+      requestMode: "deploy",
+      connectionMode
+    })
+  );
   const objectResults: unknown[] = [];
   const fieldResults: unknown[] = [];
   const objectUpdateResults: unknown[] = [];
@@ -257,6 +290,17 @@ export async function deployModelSchema(params: {
         result: objectResult.result,
         createError: objectResult.createError ?? null
       });
+      trace.push(
+        createActivityLogEntry({
+          source: "server",
+          level: "success",
+          action: "deploy-model",
+          message: `${item.object.objectApiName} object islemi: ${objectResult.operation}.`,
+          endpoint: "/api/salesforce/deploy-model",
+          requestMode: "deploy",
+          connectionMode
+        })
+      );
     }
   }
 
@@ -282,6 +326,17 @@ export async function deployModelSchema(params: {
           result: normalizeMetadataResult(result.result),
           createError: result.createError ?? null
         });
+        trace.push(
+          createActivityLogEntry({
+            source: "server",
+            level: "success",
+            action: "deploy-model",
+            message: `${item.object.objectApiName} field phase ${phase} tamamlandi.`,
+            endpoint: "/api/salesforce/deploy-model",
+            requestMode: "deploy",
+            connectionMode
+          })
+        );
       }
     }
   }
@@ -303,12 +358,24 @@ export async function deployModelSchema(params: {
       objectApiName: item.object.objectApiName,
       result: updateResult
     });
+    trace.push(
+      createActivityLogEntry({
+        source: "server",
+        level: "success",
+        action: "deploy-model",
+        message: `${item.object.objectApiName} sharing update tamamlandi.`,
+        endpoint: "/api/salesforce/deploy-model",
+        requestMode: "deploy",
+        connectionMode
+      })
+    );
   }
 
   return {
     dryRun: false,
     warnings: normalized.warnings,
     normalizedModel: normalized.model,
+    trace,
     salesforce: {
       objectResults,
       fieldResults,
@@ -317,7 +384,25 @@ export async function deployModelSchema(params: {
   };
 }
 
-export async function checkDeployStatus(asyncProcessId: string) {
-  const conn = await getSalesforceConnection();
-  return (conn.metadata as any).checkDeployStatus(asyncProcessId, true);
+export async function checkDeployStatus(
+  asyncProcessId: string,
+  salesforceConfig?: SalesforceRuntimeConfig
+) {
+  const { conn, connectionMode } = await getSalesforceConnection(salesforceConfig);
+  const result = await (conn.metadata as any).checkDeployStatus(asyncProcessId, true);
+
+  return {
+    result,
+    trace: [
+      createActivityLogEntry({
+        source: "server",
+        level: "info",
+        action: "deploy-status",
+        message: `Deploy status sorgulandi: ${asyncProcessId}.`,
+        endpoint: "/api/salesforce/deploy-status",
+        requestMode: "status",
+        connectionMode
+      })
+    ]
+  };
 }

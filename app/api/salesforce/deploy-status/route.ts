@@ -1,32 +1,43 @@
 import { NextResponse } from "next/server";
 import { checkDeployStatus } from "@/lib/salesforce/deployMetadata";
+import { createActivityLogEntry } from "@/lib/utils/activity";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   try {
-    const url = new URL(request.url);
-    const id = url.searchParams.get("id");
+    const body = await request.json();
+    const id = typeof body?.id === "string" ? body.id : "";
 
     if (!id) {
       return NextResponse.json(
         {
-          error: "id query parametresi zorunludur."
+          error: "id alani zorunludur."
         },
         { status: 400 }
       );
     }
 
-    const result = await checkDeployStatus(id);
+    const result = await checkDeployStatus(id, body.salesforceConfig);
 
     return NextResponse.json({
       id,
-      result
+      ...result
     });
   } catch (error) {
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Deploy status okunamadı."
+        error: error instanceof Error ? error.message : "Deploy status okunamadi.",
+        trace: [
+          createActivityLogEntry({
+            source: "server",
+            level: "error",
+            action: "deploy-status",
+            message: error instanceof Error ? error.message : "Deploy status okunamadi.",
+            endpoint: "/api/salesforce/deploy-status",
+            requestMode: "status"
+          })
+        ]
       },
       { status: 500 }
     );

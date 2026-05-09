@@ -1,7 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { AiProvider, SalesforceModelSchema, SalesforceObjectSchema } from "@/lib/types/schema";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { clearSalesforceSettings, hasRuntimeSalesforceSettings, readSalesforceSettings } from "@/lib/client/salesforceSettings";
+import type {
+  ActivityLogEntry,
+  AiProvider,
+  SalesforceModelSchema,
+  SalesforceObjectSchema,
+  SalesforceRuntimeConfig
+} from "@/lib/types/schema";
+import { createActivityLogEntry, summarizePayload } from "@/lib/utils/activity";
 
 type ApiMessage = {
   type: "success" | "error" | "info";
@@ -13,12 +22,65 @@ type WorkspaceParse =
   | { kind: "object"; schema: SalesforceObjectSchema }
   | null;
 
+type TraceResponse = {
+  trace?: ActivityLogEntry[];
+  warnings?: string[];
+  error?: string;
+  schema?: SalesforceObjectSchema;
+  model?: SalesforceModelSchema;
+  normalizedModel?: SalesforceModelSchema;
+  normalizedSchema?: SalesforceObjectSchema;
+  deployPlan?: unknown;
+  payloads?: unknown;
+  salesforce?: unknown;
+  result?: unknown;
+};
+
+function extractHtmlErrorMessage(payload: string) {
+  const titleMatch = payload.match(/<title>(.*?)<\/title>/i);
+  if (titleMatch?.[1]) return titleMatch[1].trim();
+
+  const bodyText = payload
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return bodyText.slice(0, 240) || "HTML error response alindi.";
+}
+
+const SAMPLE_JSON = {
+  objectLabel: "Property Lead",
+  objectPluralLabel: "Property Leads",
+  objectApiName: "Property_Lead__c",
+  description: "Sample object for Temas RE Custom Object Auto.",
+  nameField: {
+    label: "Lead Number",
+    type: "AutoNumber",
+    displayFormat: "PL-{00000}"
+  },
+  sharingModel: "Private",
+  deploymentStatus: "Deployed",
+  enableReports: true,
+  enableActivities: true,
+  enableSearch: true,
+  fields: [
+    { label: "Customer Name", apiName: "Customer_Name__c", type: "Text", length: 120, required: true },
+    { label: "Phone", apiName: "Phone__c", type: "Phone" },
+    { label: "Budget", apiName: "Budget__c", type: "Currency", precision: 18, scale: 2 },
+    { label: "Lead Status", apiName: "Lead_Status__c", type: "Picklist", values: ["New", "Qualified", "Proposal", "Closed"] }
+  ]
+};
+
+const SAMPLE_JSON_STRING = JSON.stringify(SAMPLE_JSON, null, 2);
+
 const AI_PROVIDERS: Array<{ value: AiProvider; label: string; note: string }> = [
-  { value: "openai", label: "OpenAI", note: "Hazır LLM provider" },
-  { value: "salesforce-einstein", label: "Salesforce AI / Einstein Adapter", note: "Endpoint env ile bağlanır" },
-  { value: "albert", label: "ALBERT / External AI Adapter", note: "Harici AI endpoint" },
-  { value: "scala-llm", label: "Scala LLM Service", note: "Kendi model servisin" },
-  { value: "fallback", label: "Rule-based Fallback", note: "API key gerekmez" }
+  { value: "openai", label: "OpenAI", note: "Varsayilan provider" },
+  { value: "salesforce-einstein", label: "Salesforce Einstein", note: "Salesforce AI endpoint" },
+  { value: "albert", label: "Albert", note: "Harici endpoint" },
+  { value: "scala-llm", label: "Scala LLM", note: "Ozel model servisi" },
+  { value: "fallback", label: "Fallback", note: "Kuralsal yedek uretim" }
 ];
 
 function parseWorkspaceJson(value: string): WorkspaceParse {
@@ -36,14 +98,6 @@ function parseWorkspaceJson(value: string): WorkspaceParse {
   }
 }
 
-function FieldBadge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
-      {children}
-    </span>
-  );
-}
-
 function objectList(workspace: WorkspaceParse) {
   if (!workspace) return [];
   if (workspace.kind === "model") return workspace.model.objects ?? [];
@@ -54,11 +108,46 @@ function totalFieldCount(workspace: WorkspaceParse) {
   return objectList(workspace).reduce((total, object) => total + (object.fields?.length ?? 0), 0);
 }
 
+function activityTone(level: ActivityLogEntry["level"]) {
+  if (level === "success") return "terminal-log terminal-log-success";
+  if (level === "error") return "terminal-log terminal-log-error";
+  return "terminal-log";
+}
+
+function lineCount(value: string) {
+  return value ? value.split("\n").length : 0;
+}
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function workspaceDownloadName(workspace: WorkspaceParse, fallback: string) {
+  if (!workspace) return fallback;
+
+  const base =
+    workspace.kind === "model"
+      ? workspace.model.modelApiName || workspace.model.modelName
+      : workspace.schema.objectApiName || workspace.schema.objectLabel;
+
+  const cleaned = (base || "workspace")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return `${cleaned || "workspace"}.json`;
+}
+
 export default function HomePage() {
   const [objectName, setObjectName] = useState("Loan Application");
-  const [businessContext, setBusinessContext] = useState(
-    "US lending / SmartCredit 360 için compliance-aware Salesforce data modeli üret. FCRA, ECOA, TILA, HMDA, BSA/AML ve FDCPA alanlarını dikkate al."
-  );
+  const [businessContext, setBusinessContext] = useState("Loan intake, status, amount, approval lifecycle.");
   const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [workspaceJson, setWorkspaceJson] = useState("");
   const [messages, setMessages] = useState<ApiMessage[]>([]);
@@ -66,60 +155,156 @@ export default function HomePage() {
   const [deploying, setDeploying] = useState(false);
   const [dryRun, setDryRun] = useState(true);
   const [deployResult, setDeployResult] = useState<unknown>(null);
+  const [activityOpen, setActivityOpen] = useState(true);
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
+  const [deployStatusId, setDeployStatusId] = useState("");
+  const [salesforceConfig, setSalesforceConfig] = useState<SalesforceRuntimeConfig | null>(null);
 
   const workspace = useMemo(() => parseWorkspaceJson(workspaceJson), [workspaceJson]);
   const objects = objectList(workspace);
-  const criticalRules = workspace?.kind === "model"
-    ? workspace.model.complianceRules?.filter((rule) => rule.severity === "critical") ?? []
-    : [];
+  const workspaceLabel = workspace?.kind === "model" ? "Model" : workspace?.kind === "object" ? "Object" : "Bos";
+  const totalObjects = objects.length;
+  const totalFields = totalFieldCount(workspace);
+  const hasCustomSettings = hasRuntimeSalesforceSettings(salesforceConfig);
+  const editorLineCount = lineCount(workspaceJson);
+
+  useEffect(() => {
+    const runtimeConfig = readSalesforceSettings();
+    setSalesforceConfig(runtimeConfig);
+
+    if (runtimeConfig) {
+      setActivityLog((current) => [
+        createActivityLogEntry({
+          source: "client",
+          level: "info",
+          action: "settings",
+          message: "Session Salesforce ayarlari yuklendi.",
+          requestMode: "settings",
+          detail: summarizePayload(runtimeConfig)
+        }),
+        ...current
+      ]);
+    }
+  }, []);
+
+  function pushLogs(entries: ActivityLogEntry[]) {
+    if (!entries.length) return;
+    setActivityLog((current) => [...entries.slice().reverse(), ...current]);
+  }
+
+  function pushClientLog(entry: Omit<ActivityLogEntry, "id" | "timestamp">) {
+    pushLogs([createActivityLogEntry(entry)]);
+  }
+
+  async function requestJson<T extends TraceResponse>(params: {
+    endpoint: string;
+    method?: "GET" | "POST";
+    action: ActivityLogEntry["action"];
+    requestMode: ActivityLogEntry["requestMode"];
+    body?: Record<string, unknown>;
+  }): Promise<T> {
+    pushClientLog({
+      source: "client",
+      level: "info",
+      action: params.action,
+      message: `${params.endpoint} cagrildi.`,
+      endpoint: params.endpoint,
+      requestMode: params.requestMode,
+      detail: params.body ? summarizePayload(params.body) : undefined
+    });
+
+    const response = await fetch(params.endpoint, {
+      method: params.method ?? "GET",
+      headers: params.body
+        ? {
+            "Content-Type": "application/json",
+            Accept: "application/json"
+          }
+        : {
+            Accept: "application/json"
+          },
+      body: params.body ? JSON.stringify(params.body) : undefined
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    const raw = await response.text();
+    let data: T | { error?: string; trace?: ActivityLogEntry[] };
+
+    if (contentType.includes("application/json")) {
+      try {
+        data = JSON.parse(raw) as T;
+      } catch {
+        throw new Error("API JSON yerine bozuk bir response dondu.");
+      }
+    } else {
+      const detail = extractHtmlErrorMessage(raw);
+      pushClientLog({
+        source: "client",
+        level: "error",
+        action: params.action,
+        message: `${params.endpoint} JSON yerine HTML dondu.`,
+        endpoint: params.endpoint,
+        requestMode: params.requestMode,
+        detail
+      });
+      throw new Error(`Sunucu JSON yerine HTML dondu: ${detail}`);
+    }
+
+    pushLogs(Array.isArray(data?.trace) ? data.trace : []);
+
+    if (!response.ok) {
+      pushClientLog({
+        source: "client",
+        level: "error",
+        action: params.action,
+        message: data?.error ?? "Istek basarisiz oldu.",
+        endpoint: params.endpoint,
+        requestMode: params.requestMode
+      });
+      throw new Error(data?.error ?? "Istek basarisiz oldu.");
+    }
+
+    pushClientLog({
+      source: "client",
+      level: "success",
+      action: params.action,
+      message: `${params.endpoint} basarili dondu.`,
+      endpoint: params.endpoint,
+      requestMode: params.requestMode
+    });
+
+    return data as T;
+  }
 
   async function generateSchema() {
     setLoading(true);
     setDeployResult(null);
-    setMessages([{ type: "info", text: "AI provider üzerinden schema oluşturuluyor..." }]);
+    setMessages([{ type: "info", text: "Schema olusturuluyor..." }]);
 
     try {
-      const response = await fetch("/api/ai/generate-schema", {
+      const data = await requestJson<TraceResponse>({
+        endpoint: "/api/ai/generate-schema",
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
+        action: "generate-schema",
+        requestMode: "schema",
+        body: {
           objectName,
           businessContext,
           aiProvider
-        })
+        }
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.error ?? "Schema üretilemedi.");
+      if (!data.schema) {
+        throw new Error("Schema yaniti bos.");
       }
 
       setWorkspaceJson(JSON.stringify(data.schema, null, 2));
-
-      const warningMessages: ApiMessage[] = (data.warnings ?? []).map((warning: string) => ({
-        type: "info",
-        text: warning
-      }));
-
       setMessages([
-        {
-          type: "success",
-          text: data.usedAI
-            ? `${data.provider} ile schema önerisi oluşturuldu.`
-            : `${data.provider ?? "fallback"} ile güvenli fallback schema oluşturuldu.`
-        },
-        ...warningMessages
+        { type: "success", text: "Schema hazirlandi." },
+        ...((data.warnings ?? []).map((warning) => ({ type: "info" as const, text: warning })))
       ]);
     } catch (error) {
-      setMessages([
-        {
-          type: "error",
-          text: error instanceof Error ? error.message : "Bilinmeyen hata oluştu."
-        }
-      ]);
+      setMessages([{ type: "error", text: error instanceof Error ? error.message : "Schema uretilemedi." }]);
     } finally {
       setLoading(false);
     }
@@ -128,34 +313,54 @@ export default function HomePage() {
   async function loadSmartCreditTemplate() {
     setLoading(true);
     setDeployResult(null);
-    setMessages([{ type: "info", text: "SmartCredit 360 industry template yükleniyor..." }]);
+    setMessages([{ type: "info", text: "Template yukleniyor..." }]);
 
     try {
-      const response = await fetch("/api/templates/smartcredit360");
-      const data = await response.json();
+      const data = await requestJson<TraceResponse>({
+        endpoint: "/api/templates/smartcredit360",
+        action: "load-template",
+        requestMode: "template"
+      });
 
-      if (!response.ok) {
-        throw new Error(data?.error ?? "Template yüklenemedi.");
+      if (!data.model) {
+        throw new Error("Template modeli bos.");
       }
 
       setWorkspaceJson(JSON.stringify(data.model, null, 2));
       setMessages([
-        {
-          type: "success",
-          text: "SmartCredit 360 US Lending veri modeli yüklendi. Önce Dry Run ile deploy planını kontrol et."
-        },
-        ...(data.warnings ?? []).map((warning: string) => ({
-          type: "info" as const,
-          text: warning
-        }))
+        { type: "success", text: "Template yuklendi." },
+        ...((data.warnings ?? []).map((warning) => ({ type: "info" as const, text: warning })))
       ]);
     } catch (error) {
+      setMessages([{ type: "error", text: error instanceof Error ? error.message : "Template yuklenemedi." }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadEnterpriseRealtorTemplate() {
+    setLoading(true);
+    setDeployResult(null);
+    setMessages([{ type: "info", text: "Realtor template yukleniyor..." }]);
+
+    try {
+      const data = await requestJson<TraceResponse>({
+        endpoint: "/api/templates/enterprise-realtor-management",
+        action: "load-template",
+        requestMode: "template"
+      });
+
+      if (!data.model) {
+        throw new Error("Template modeli bos.");
+      }
+
+      setWorkspaceJson(JSON.stringify(data.model, null, 2));
       setMessages([
-        {
-          type: "error",
-          text: error instanceof Error ? error.message : "Template yüklenirken hata oluştu."
-        }
+        { type: "success", text: "Enterprise Realtor template yuklendi." },
+        ...((data.warnings ?? []).map((warning) => ({ type: "info" as const, text: warning })))
       ]);
+    } catch (error) {
+      setMessages([{ type: "error", text: error instanceof Error ? error.message : "Template yuklenemedi." }]);
     } finally {
       setLoading(false);
     }
@@ -165,305 +370,380 @@ export default function HomePage() {
     const parsed = parseWorkspaceJson(workspaceJson);
 
     if (!parsed) {
-      setMessages([{ type: "error", text: "JSON geçerli bir schema/model değil." }]);
+      setMessages([{ type: "error", text: "JSON schema veya model formatinda degil." }]);
       return;
     }
 
     setDeploying(true);
     setDeployResult(null);
-    setMessages([
-      {
-        type: "info",
-        text: dryRun
-          ? "Dry run çalışıyor; Salesforce'a yazılmayacak."
-          : "Salesforce Metadata API deploy başlatıldı."
-      }
-    ]);
+    setMessages([{ type: "info", text: dryRun ? "Dry run basladi." : "Deploy basladi." }]);
 
     try {
       const endpoint = parsed.kind === "model"
         ? "/api/salesforce/deploy-model"
         : "/api/salesforce/deploy-object";
-      const payload = parsed.kind === "model"
-        ? { model: parsed.model, dryRun }
-        : { schema: parsed.schema, dryRun };
-
-      const response = await fetch(endpoint, {
+      const data = await requestJson<TraceResponse>({
+        endpoint,
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
+        action: parsed.kind === "model" ? "deploy-model" : "deploy-object",
+        requestMode: dryRun ? "dry-run" : "deploy",
+        body: parsed.kind === "model"
+          ? { model: parsed.model, dryRun, salesforceConfig }
+          : { schema: parsed.schema, dryRun, salesforceConfig }
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.error ?? "Deploy başarısız oldu.");
-      }
 
       setDeployResult(data);
       setMessages([
-        {
-          type: "success",
-          text: dryRun
-            ? "Dry run başarılı. Deploy planı ve payload aşağıda."
-            : "Salesforce metadata oluşturma işlemi tamamlandı."
-        },
-        ...(data.warnings ?? []).map((warning: string) => ({
-          type: "info" as const,
-          text: warning
-        }))
+        { type: "success", text: dryRun ? "Dry run tamamlandi." : "Deploy tamamlandi." },
+        ...((data.warnings ?? []).map((warning) => ({ type: "info" as const, text: warning })))
       ]);
     } catch (error) {
-      setMessages([
-        {
-          type: "error",
-          text: error instanceof Error ? error.message : "Bilinmeyen deploy hatası."
-        }
-      ]);
+      setMessages([{ type: "error", text: error instanceof Error ? error.message : "Deploy basarisiz." }]);
     } finally {
       setDeploying(false);
     }
   }
 
-  return (
-    <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <section className="mb-8 overflow-hidden rounded-[2rem] border border-white/70 bg-white/85 p-8 shadow-soft backdrop-blur">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="mb-4 inline-flex rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
-                Salesforce AI Metadata Builder • Industry Templates • Multi-AI Adapter
-              </div>
-              <h1 className="text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
-                OrgPilot AI Pro
-              </h1>
-              <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
-                Tek obje üretiminden profesyonel veri modeline geçtik. SmartCredit 360 gibi sektör template'lerini,
-                AI provider katmanını, compliance notlarını ve Salesforce Metadata API deploy akışını tek ekranda yönet.
-              </p>
-            </div>
+  async function inspectDeployStatus() {
+    if (!deployStatusId.trim()) {
+      setMessages([{ type: "error", text: "Deploy status icin process id gir." }]);
+      return;
+    }
 
-            <div className="grid gap-3 rounded-3xl bg-slate-950 p-5 text-white sm:min-w-[360px]">
-              <div className="text-sm text-slate-300">Profesyonel Akış</div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <span className="rounded-2xl bg-white/10 px-3 py-2">1. Template / AI</span>
-                <span className="rounded-2xl bg-white/10 px-3 py-2">2. Validator</span>
-                <span className="rounded-2xl bg-white/10 px-3 py-2">3. Dry Run Plan</span>
-                <span className="rounded-2xl bg-white/10 px-3 py-2">4. Metadata Deploy</span>
-              </div>
+    try {
+      const data = await requestJson<TraceResponse>({
+        endpoint: "/api/salesforce/deploy-status",
+        method: "POST",
+        action: "deploy-status",
+        requestMode: "status",
+        body: {
+          id: deployStatusId.trim(),
+          salesforceConfig
+        }
+      });
+
+      setDeployResult(data);
+      setMessages([{ type: "success", text: "Deploy status alindi." }]);
+    } catch (error) {
+      setMessages([{ type: "error", text: error instanceof Error ? error.message : "Deploy status okunamadi." }]);
+    }
+  }
+
+  function resetRuntimeSettings() {
+    clearSalesforceSettings();
+    setSalesforceConfig(null);
+    pushClientLog({
+      source: "client",
+      level: "info",
+      action: "settings",
+      message: "Session Salesforce ayarlari temizlendi.",
+      requestMode: "settings"
+    });
+  }
+
+  function formatWorkspaceJson() {
+    try {
+      const parsed = JSON.parse(workspaceJson);
+      setWorkspaceJson(JSON.stringify(parsed, null, 2));
+      setMessages([{ type: "success", text: "JSON formatlandi." }]);
+    } catch {
+      setMessages([{ type: "error", text: "Format icin gecerli JSON gerekli." }]);
+    }
+  }
+
+  async function copyWorkspaceJson() {
+    try {
+      await navigator.clipboard.writeText(workspaceJson || SAMPLE_JSON_STRING);
+      setMessages([{ type: "success", text: "JSON panoya kopyalandi." }]);
+    } catch {
+      setMessages([{ type: "error", text: "JSON kopyalanamadi." }]);
+    }
+  }
+
+  function loadSampleJson() {
+    setWorkspaceJson(SAMPLE_JSON_STRING);
+    setMessages([{ type: "info", text: "Ornek JSON editor'e yuklendi." }]);
+  }
+
+  function downloadSampleJson() {
+    downloadTextFile("sample-salesforce-object.json", SAMPLE_JSON_STRING);
+    setMessages([{ type: "info", text: "Ornek JSON indirildi." }]);
+  }
+
+  function downloadWorkspace() {
+    downloadTextFile(workspaceDownloadName(workspace, "workspace.json"), workspaceJson || SAMPLE_JSON_STRING);
+    setMessages([{ type: "info", text: "Workspace JSON indirildi." }]);
+  }
+
+  return (
+    <main className="admin-shell">
+      <div className="admin-frame admin-frame-compact">
+        <header className="admin-topbar admin-topbar-compact">
+          <div className="brand-mark">
+            <div className="brand-logo brand-logo-soft">
+              <img
+                src="/branding/softinnovas-logo.png"
+                alt="Softinnovas"
+                className="h-10 w-10 object-contain"
+              />
+            </div>
+            <div>
+              <div className="brand-caption">Temas RE Workspace</div>
+              <h1 className="brand-title brand-title-compact">Temas RE Custom Object Auto</h1>
             </div>
           </div>
-        </section>
 
-        <div className="grid gap-6 lg:grid-cols-[430px_1fr]">
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft">
-            <h2 className="text-xl font-bold text-slate-950">Model Oluştur / Yükle</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Hazır SmartCredit 360 US template'ini yükleyebilir veya tek bir yeni obje için AI schema üretebilirsin.
-            </p>
+          <div className="topbar-actions topbar-actions-wrap">
+            <span className={`status-pill ${hasCustomSettings ? "status-pill-active" : ""}`}>
+              {hasCustomSettings ? "Session Settings" : "ENV Mode"}
+            </span>
+            <Link href="/settings" className="nav-button">
+              Settings
+            </Link>
+          </div>
+        </header>
 
-            <button
-              onClick={loadSmartCreditTemplate}
-              disabled={loading}
-              className="mt-5 w-full rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              SmartCredit 360 US Template Yükle
-            </button>
-
-            <div className="my-6 h-px bg-slate-200" />
-
-            <label className="block text-sm font-semibold text-slate-700">AI Provider</label>
-            <select
-              value={aiProvider}
-              onChange={(event) => setAiProvider(event.target.value as AiProvider)}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-            >
-              {AI_PROVIDERS.map((provider) => (
-                <option key={provider.value} value={provider.value}>
-                  {provider.label}
-                </option>
-              ))}
-            </select>
-            <div className="mt-2 text-xs leading-5 text-slate-500">
-              {AI_PROVIDERS.find((provider) => provider.value === aiProvider)?.note}
+        <section className="workspace-grid workspace-grid-compact">
+          <aside className="admin-panel admin-panel-compact">
+            <div className="panel-head">
+              <div>
+                <div className="panel-kicker">Build Panel</div>
+                <h2 className="panel-title panel-title-small">Schema</h2>
+              </div>
+              <div className="button-stack button-stack-inline">
+                <button
+                  onClick={loadSmartCreditTemplate}
+                  disabled={loading}
+                  className="secondary-button"
+                >
+                  Credit Template
+                </button>
+                <button
+                  onClick={loadEnterpriseRealtorTemplate}
+                  disabled={loading}
+                  className="secondary-button"
+                >
+                  Realtor Template
+                </button>
+              </div>
             </div>
 
-            <label className="mt-5 block text-sm font-semibold text-slate-700">Obje İsmi</label>
-            <input
-              value={objectName}
-              onChange={(event) => setObjectName(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-              placeholder="Loan Application"
-            />
+            <div className="form-stack form-stack-tight">
+              <label className="field-block">
+                <span className="field-label">Provider</span>
+                <select
+                  value={aiProvider}
+                  onChange={(event) => setAiProvider(event.target.value as AiProvider)}
+                  className="text-field"
+                >
+                  {AI_PROVIDERS.map((provider) => (
+                    <option key={provider.value} value={provider.value}>
+                      {provider.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="inline-meta">
+                  {AI_PROVIDERS.find((provider) => provider.value === aiProvider)?.note}
+                </span>
+              </label>
 
-            <label className="mt-5 block text-sm font-semibold text-slate-700">İş Bağlamı / Not</label>
-            <textarea
-              value={businessContext}
-              onChange={(event) => setBusinessContext(event.target.value)}
-              rows={6}
-              className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-              placeholder="Bu obje hangi uygulamada kullanılacak?"
-            />
+              <label className="field-block">
+                <span className="field-label">Object Name</span>
+                <input
+                  value={objectName}
+                  onChange={(event) => setObjectName(event.target.value)}
+                  className="text-field"
+                  placeholder="Loan Application"
+                />
+              </label>
 
-            <button
-              onClick={generateSchema}
-              disabled={loading || !objectName.trim()}
-              className="mt-5 w-full rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "İşlem Yapılıyor..." : "AI ile Tek Obje Schema Oluştur"}
-            </button>
+              <label className="field-block">
+                <span className="field-label">Description</span>
+                <textarea
+                  value={businessContext}
+                  onChange={(event) => setBusinessContext(event.target.value)}
+                  rows={5}
+                  className="text-field text-area"
+                  placeholder="Kisa is tanimi"
+                />
+              </label>
 
-            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-              ABD kredi/veri regülasyonları ciddi konudur. Bu araç metadata hızlandırır; gerçek production kullanımı için hukuk, compliance ve security review şarttır.
+              <label className="toggle-row">
+                <span>Dry Run</span>
+                <input
+                  type="checkbox"
+                  checked={dryRun}
+                  onChange={(event) => setDryRun(event.target.checked)}
+                  className="h-4 w-4"
+                />
+              </label>
+            </div>
+
+            <div className="button-stack button-stack-tight">
+              <button
+                onClick={generateSchema}
+                disabled={loading || !objectName.trim()}
+                className="primary-button"
+              >
+                {loading ? "Calisiyor..." : "Schema Olustur"}
+              </button>
+
+              <button
+                onClick={deployWorkspace}
+                disabled={deploying || !workspace}
+                className="dark-button"
+              >
+                {deploying ? "Gonderiliyor..." : dryRun ? "Dry Run" : "Deploy"}
+              </button>
+            </div>
+
+            <div className="settings-inline">
+              <div>
+                <div className="field-label">Salesforce Connection</div>
+                <div className="inline-meta">
+                  {hasCustomSettings ? "Session ayari aktif" : "ENV fallback aktif"}
+                </div>
+              </div>
+              <div className="inline-actions">
+                <Link href="/settings" className="tiny-link">
+                  Duzenle
+                </Link>
+                {hasCustomSettings && (
+                  <button onClick={resetRuntimeSettings} className="tiny-link danger-link">
+                    Temizle
+                  </button>
+                )}
+              </div>
             </div>
 
             {messages.length > 0 && (
-              <div className="mt-5 grid gap-2">
+              <div className="message-stack">
                 {messages.map((message, index) => (
-                  <div
-                    key={`${message.type}-${index}`}
-                    className={[
-                      "rounded-2xl px-4 py-3 text-sm leading-6",
-                      message.type === "success" ? "border border-emerald-200 bg-emerald-50 text-emerald-800" : "",
-                      message.type === "error" ? "border border-red-200 bg-red-50 text-red-800" : "",
-                      message.type === "info" ? "border border-slate-200 bg-slate-50 text-slate-700" : ""
-                    ].join(" ")}
-                  >
+                  <div key={`${message.type}-${index}`} className={`message-box message-${message.type}`}>
                     {message.text}
                   </div>
                 ))}
               </div>
             )}
-          </section>
+          </aside>
 
-          <section className="grid gap-6">
-            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-950">Workspace JSON</h2>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Burada tek object schema veya çoklu object model düzenlenebilir. Deploy öncesi backend tekrar normalize/validate eder.
-                  </p>
+          <section className="admin-panel admin-panel-compact">
+            <div className="panel-head panel-head-spread panel-head-mobile">
+              <div>
+                <div className="panel-kicker">Workspace JSON</div>
+                <h2 className="panel-title panel-title-small">Terminal Editor</h2>
+              </div>
+
+              <div className="workspace-meta workspace-meta-wrap">
+                <span className="meta-pill">{workspaceLabel}</span>
+                <span className="meta-pill">{totalObjects} object</span>
+                <span className="meta-pill">{totalFields} field</span>
+              </div>
+            </div>
+
+            <div className="editor-shell editor-shell-terminal">
+              <div className="editor-bar editor-bar-terminal">
+                <div className="terminal-chrome">
+                  <span className="terminal-dot terminal-dot-red" />
+                  <span className="terminal-dot terminal-dot-yellow" />
+                  <span className="terminal-dot terminal-dot-green" />
                 </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <FieldBadge>{workspace?.kind === "model" ? "Model" : workspace?.kind === "object" ? "Single Object" : "No JSON"}</FieldBadge>
-                  <FieldBadge>{objects.length} object</FieldBadge>
-                  <FieldBadge>{totalFieldCount(workspace)} field</FieldBadge>
-                  {criticalRules.length > 0 && <FieldBadge>{criticalRules.length} critical rule</FieldBadge>}
-                  <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={dryRun}
-                      onChange={(event) => setDryRun(event.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    Dry Run
-                  </label>
+                <div className="editor-title-group">
+                  <span>workspace.json</span>
+                  <span>{workspace ? "Editable" : "Ready for input"}</span>
+                </div>
+                <div className="editor-actions">
+                  <button onClick={formatWorkspaceJson} className="terminal-action-button">Format</button>
+                  <button onClick={copyWorkspaceJson} className="terminal-action-button">Copy</button>
+                  <button onClick={loadSampleJson} className="terminal-action-button">Sample</button>
+                  <button onClick={downloadSampleJson} className="terminal-action-button">Sample Download</button>
+                  <button onClick={downloadWorkspace} className="terminal-action-button">Download</button>
                 </div>
               </div>
 
               <textarea
                 value={workspaceJson}
                 onChange={(event) => setWorkspaceJson(event.target.value)}
-                rows={22}
-                className="mt-5 w-full rounded-2xl border border-slate-200 bg-slate-950 px-4 py-4 font-mono text-sm leading-6 text-slate-100 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                placeholder="SmartCredit 360 template yükle veya AI ile schema oluştur."
+                rows={24}
+                className="editor-area editor-area-terminal"
+                placeholder="Schema veya model JSON yapisini buraya gir."
                 spellCheck={false}
               />
 
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                <button
-                  onClick={deployWorkspace}
-                  disabled={deploying || !workspace}
-                  className="rounded-2xl bg-slate-950 px-5 py-3 font-bold text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {deploying ? "İşlem Yapılıyor..." : dryRun ? "Dry Run Çalıştır" : "Salesforce'a Deploy Et"}
-                </button>
-
-                {!workspace && workspaceJson && (
-                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    JSON formatı geçerli ama beklenen model/schema yapısı değil.
-                  </div>
-                )}
+              <div className="editor-footer">
+                <span>{editorLineCount} line</span>
+                <span>UTF-8 JSON</span>
+                <span>{workspace ? "Valid structure detected" : "Use Sample to see the expected format"}</span>
               </div>
             </div>
 
-            {workspace && (
-              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h2 className="text-2xl font-black text-slate-950">
-                      {workspace.kind === "model" ? workspace.model.modelName : workspace.schema.objectLabel}
-                    </h2>
-                    <p className="mt-1 font-mono text-sm text-blue-700">
-                      {workspace.kind === "model" ? workspace.model.modelApiName : workspace.schema.objectApiName}
-                    </p>
-                    {workspace.kind === "model" && (
-                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{workspace.model.description}</p>
+            <div className="result-head result-head-mobile">
+              <div>
+                <div className="field-label">Deploy Result</div>
+                <div className="inline-meta">Dry run, deploy veya status yaniti</div>
+              </div>
+              <div className="status-form status-form-mobile">
+                <input
+                  value={deployStatusId}
+                  onChange={(event) => setDeployStatusId(event.target.value)}
+                  className="text-field compact-input"
+                  placeholder="Async process id"
+                />
+                <button onClick={inspectDeployStatus} className="secondary-button">
+                  Status
+                </button>
+              </div>
+            </div>
+
+            <pre className="result-console result-console-terminal">
+              {JSON.stringify(deployResult ?? { info: "Henuz sonuc yok." }, null, 2)}
+            </pre>
+          </section>
+        </section>
+
+        <section className="activity-panel">
+          <button className="activity-toggle" onClick={() => setActivityOpen((current) => !current)}>
+            <span>Activity Console</span>
+            <span>{activityOpen ? "Hide" : "Show"}</span>
+          </button>
+
+          {activityOpen && (
+            <div className="activity-body">
+              {activityLog.length === 0 ? (
+                <div className="terminal-empty">Henuz log yok.</div>
+              ) : (
+                activityLog.map((entry) => (
+                  <div key={entry.id} className={activityTone(entry.level)}>
+                    <div className="terminal-row">
+                      <span className="terminal-time">{new Date(entry.timestamp).toLocaleTimeString("tr-TR")}</span>
+                      <span className="terminal-action">{entry.action}</span>
+                      {entry.endpoint && <span className="terminal-endpoint">{entry.endpoint}</span>}
+                    </div>
+                    <div className="terminal-message">{entry.message}</div>
+                    {(entry.connectionMode || entry.detail) && (
+                      <div className="terminal-detail">
+                        {entry.connectionMode ? `connection=${entry.connectionMode}` : ""}
+                        {entry.connectionMode && entry.detail ? " • " : ""}
+                        {entry.detail ?? ""}
+                      </div>
                     )}
                   </div>
-                </div>
+                ))
+              )}
+            </div>
+          )}
+        </section>
 
-                <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                  {objects.map((object) => (
-                    <div key={object.objectApiName} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="font-bold text-slate-950">{object.objectLabel}</div>
-                          <div className="mt-1 font-mono text-xs text-slate-500">{object.objectApiName}</div>
-                        </div>
-                        <FieldBadge>{object.isStandardObject ? "Standard" : "Custom"}</FieldBadge>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <FieldBadge>{object.fields?.length ?? 0} fields</FieldBadge>
-                        <FieldBadge>{object.sharingModel ?? "ReadWrite"}</FieldBadge>
-                        {object.nameField?.type === "AutoNumber" && <FieldBadge>Auto Number</FieldBadge>}
-                      </div>
-                      <div className="mt-4 grid gap-2">
-                        {(object.fields ?? []).slice(0, 6).map((field) => (
-                          <div key={field.apiName} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 text-xs">
-                            <span className="font-medium text-slate-800">{field.label}</span>
-                            <span className="font-mono text-slate-500">{field.type}</span>
-                          </div>
-                        ))}
-                        {(object.fields?.length ?? 0) > 6 && (
-                          <div className="text-xs text-slate-500">+{(object.fields?.length ?? 0) - 6} field daha...</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {workspace.kind === "model" && (workspace.model.complianceRules?.length ?? 0) > 0 && (
-                  <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5">
-                    <h3 className="font-bold text-amber-950">Compliance Guardrails</h3>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                      {workspace.model.complianceRules?.map((rule) => (
-                        <div key={rule.code} className="rounded-2xl bg-white/80 p-4 text-sm leading-6 text-amber-950">
-                          <div className="font-bold">{rule.code} — {rule.title}</div>
-                          <p className="mt-1">{rule.description}</p>
-                          <div className="mt-2 font-mono text-xs text-amber-800">{rule.severity}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {deployResult !== null && (
-              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-soft">
-                <h2 className="text-xl font-bold text-slate-950">Deploy / Dry Run Sonucu</h2>
-                <pre className="mt-4 max-h-[620px] overflow-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
-                  {JSON.stringify(deployResult, null, 2)}
-                </pre>
-              </div>
-            )}
-          </section>
-        </div>
+        <footer className="partner-footer">
+          <img
+            src="/branding/softinnovas-wordmark.png"
+            alt="Softinnovas"
+            className="partner-wordmark-image"
+          />
+          <p className="partner-copy">
+            Salesforce metadata operasyonlari icin teknoloji partnerliginde gelistirildi.
+          </p>
+        </footer>
       </div>
     </main>
   );

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { smartCredit360Model } from "@/lib/templates/smartcredit360";
+import { enterpriseRealtorManagementModel } from "@/lib/templates/enterpriseRealtorManagement";
 import { validateAndNormalizeModelSchema } from "@/lib/validation/schemaValidator";
 import { createActivityLogEntry } from "@/lib/utils/activity";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const normalized = validateAndNormalizeModelSchema(smartCredit360Model());
+  const normalized = validateAndNormalizeModelSchema(enterpriseRealtorManagementModel());
   return NextResponse.json({
     ...normalized,
     trace: [
@@ -14,8 +14,8 @@ export async function GET() {
         source: "server",
         level: "success",
         action: "load-template",
-        message: "SmartCredit 360 template yuklendi.",
-        endpoint: "/api/templates/smartcredit360",
+        message: "Enterprise Realtor Management template yuklendi.",
+        endpoint: "/api/templates/enterprise-realtor-management",
         requestMode: "template"
       })
     ]
